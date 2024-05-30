@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport"
+        content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+
+  <title>Monthly Global Land-Surface Temperature</title>
+  <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>-->
+
+  <link href="css/bootstrap.min.css" rel="stylesheet" type="text/css">
+  <style>
+    #tooltip {
+      position: absolute;
+      text-align: center;
+      font-size: 12px;
+      background: lightsteelblue;
+      padding: 5px 10px;
+      box-shadow: 1px 1px 10px;
+      border-radius: 5px;
+      pointer-events: none;
+    }
+
+    .svg-inner-wrapper {
+      width: 1500px;
+    }
+  </style>
+
+  <script src="js/bootstrap.bundle.min.js" type="text/javascript"></script>
+  <script src="js/d3.min.js"></script>
+</head>
+<body>
+<div class="container">
+  <h1 id="title" class="mt-5 mb-2 text-center">Monthly Global Land-Surface Temperature</h1>
+  <h5 id="description" class="fw-normal mb-5 text-center"></h5>
+
+  <div class="legend-outer-wrapper text-center mb-3">
+    <div class="legend-inner-wrapper d-inline-block"></div>
+  </div>
+
+  <div class="svg-outer-wrapper position-relative overflow-x-auto overflow-y-hidden">
+    <div class="svg-inner-wrapper ms-auto me-auto"></div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    fetch('https://raw.githubusercontent.com/freeCodeCamp/ProjectReferenceData/master/global-temperature.json')
+      .then(function(response) {
+        return response.json();
+      })
+      .then(function(r) {
+        var baseTemperature = parseFloat(r['baseTemperature'] || 0);
+        var dataset = r['monthlyVariance'] || [];
+
+        var svgWidth = 1500;
+        var svgHeight = 500;
+        var svgPaddingLeft = 80;
+        var svgPaddingRight = 20;
+        var svgPaddingTop = 20;
+        var svgPaddingBottom = 60;
+
+        var tooltipWidth = 120;
+        var tooltipMinHeight = 50;
+
+        var legendPaddingX = 20;
+        var legendPaddingBottom = 20;
+        var legendWidth = 350;
+        var legendHeight = 50;
+
+        var colors = [
+          {
+            background: '#00008b',
+            text: 'white',
+          },
+          {
+            background: '#3e5fcc',
+            text: 'white',
+          },
+          {
+            background: '#6b85d8',
+            text: 'white',
+          },
+          {
+            background: '#9eb0e5',
+            text: 'black',
+          },
+          {
+            background: '#bfcbee',
+            text: 'black',
+          },
+          {
+            background: '#d9e2fa',
+            text: 'black',
+          },
+          {
+            background: '#fff33b',
+            text: 'black',
+          },
+          {
+            background: '#fdc70c',
+            text: 'black',
+          },
+          {
+            background: '#f3903f',
+            text: 'white',
+          },
+          {
+            background: '#e93e3a',
+            text: 'white',
+          },
+          {
+            background: '#8b0000',
+            text: 'white',
+          },
+          {
+            background: '#67001f',
+            text: 'white',
+          },
+        ];
+        var bkgColors = colors.map(function(color) {
+          return color.background;
+        });
+        var textColors = colors.map(function(color) {
+          return color.text;
+        });
+
+        /**
+         * x scale
+         */
+        var years = dataset.map(function(d) {
+          return parseInt(d['year'] || '0');
+        });
+        var minYear = d3.min(years);
+        var maxYear = d3.max(years);
+        var xMin = minYear - 1;
+        var xMax = maxYear + 1;
+        var xScale = d3
+          .scaleBand()
+          .domain(years)
+          .range([svgPaddingLeft, svgWidth - svgPaddingRight]);
+
+        /**
+         * y scale
+         */
+        var monthIntegers = dataset.map(function(d) {
+          return parseInt(d['month'] || '0') - 1;
+        });
+        var minMonth = d3.min(monthIntegers);
+        var maxMonth = d3.max(monthIntegers);
+        var yScale = d3
+          .scaleBand()
+          .domain([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+          .range([svgPaddingTop, svgHeight - svgPaddingBottom]);
+
+        /**
+         * Description
+         */
+        var $description = document.getElementById('description');
+        if ($description) {
+          $description.innerHTML = `${minYear} - ${maxYear}: base temperature ${baseTemperature}&#8451;`;
+        }
+
+        /**
+         * Tooltip
+         */
+        var tooltip = d3
+          .select('.svg-inner-wrapper')
+          .append('div')
+          .attr('id', 'tooltip')
+          .style('width', tooltipWidth + 'px')
+          .style('min-height', tooltipMinHeight + 'px')
+          .style('opacity', 0);
+
+        /**
+         * main svg
+         */
+        var svg = d3
+          .select('.svg-inner-wrapper')
+          .append('svg')
+          .attr('width', svgWidth)
+          .attr('height', svgHeight);
+
+        /**
+         * x axis
+         */
+        var xAxis = d3.axisBottom(xScale)
+          .tickValues(
+            xScale.domain().filter(function(year) {
+              // set ticks to years divisible by 10
+              return year % 10 === 0;
+            }),
+          )
+          .tickFormat(function(year) {
+            var date = new Date(year, 0, 10);
+            return d3.timeFormat('%Y')(date);
+          });
+
+        svg
+          .append('g')
+          .call(xAxis)
+          .attr('id', 'x-axis')
+          .attr('transform', 'translate(0, ' + (svgHeight - svgPaddingBottom) + ')');
+
+        /**
+         * Text on y axis
+         */
+        svg
+          .append('text')
+          .attr('x', 0)
+          .attr('y', svgHeight - 20)
+          .style('transform', 'translateX(50%)')
+          .text('Years');
+
+        /**
+         * y axis
+         */
+        var yAxis = d3.axisLeft(yScale)
+          .tickFormat(function(monthInteger) {
+            var date = new Date(1970, monthInteger, 10);
+            return d3.timeFormat('%B')(date);
+          });
+
+        svg
+          .append('g')
+          .call(yAxis)
+          .attr('id', 'y-axis')
+          .attr('transform', 'translate(' + svgPaddingLeft + ', 0)');
+
+        /**
+         * Text on y axis
+         */
+        svg
+          .append('text')
+          .attr('x', 0)
+          .attr('y', 15)
+          .style('transform', 'translateY(50%) rotate(-90deg)')
+          .text('Months');
+
+        /**
+         * Legend
+         */
+        var temperatureVariances = dataset.map(function(d) {
+          return parseFloat(d['variance'] || '0');
+        });
+        var temperatures = dataset.map(function(d, i) {
+          return baseTemperature + temperatureVariances[i];
+        });
+        var minTemperature = d3.min(temperatures);
+        var maxTemperature = d3.max(temperatures);
+        var temperatureDomain = (function (min, max, count) {
+          var arr = [];
+          var step = (max - min) / count;
+          for (var i = 1; i < count; i++) {
+            arr.push(min + i * step);
+          }
+          return arr;
+        })(minTemperature, maxTemperature, colors.length);
+
+        var legendThreshold = d3
+          .scaleThreshold()
+          .domain(temperatureDomain)
+          .range(bkgColors);
+
+        var legendTextThreshold = d3
+          .scaleThreshold()
+          .domain(temperatureDomain)
+          .range(textColors);
+
+        var legendXScale = d3
+          .scaleLinear()
+          .domain([minTemperature, maxTemperature])
+          .range([0, legendWidth - (2 * legendPaddingX)]);
+
+        var legendXAxis = d3
+          .axisBottom()
+          .scale(legendXScale)
+          .tickValues(legendThreshold.domain())
+          .tickFormat(d3.format('.1f'));
+
+        var legendThresholdData = legendThreshold.range().map(function (color) {
+          var d = legendThreshold.invertExtent(color);
+          if (d[0] === undefined) {
+            d[0] = legendXScale.domain()[0];
+          }
+          if (d[1] === undefined) {
+            d[1] = legendXScale.domain()[1];
+          }
+          return d;
+        });
+
+        var legendWrapper = d3
+          .select('.legend-inner-wrapper')
+          .append('svg')
+          .attr('width', legendWidth)
+          .attr('height', legendHeight);
+
+        var legend = legendWrapper
+          .append('g')
+          .attr('id', 'legend')
+          .attr('transform', 'translate(' + legendPaddingX + ',0)');
+
+        legend
+          .append('g')
+          .selectAll('rect')
+          .data(legendThresholdData)
+          .enter()
+          .append('rect')
+          .style('fill', function (d) {
+            return legendThreshold(d[0]);
+          })
+          .attr('x', function(d) {
+            return legendXScale(d[0]);
+          })
+          .attr('y', 0)
+          .attr('width', function(d) {
+            return d[0] && d[1] ? legendXScale(d[1]) - legendXScale(d[0]) : legendXScale(null);
+          })
+          .attr('height', (legendHeight - legendPaddingBottom));
+
+        legend
+          .append('g')
+          .attr('transform', 'translate(' + 0 + ',' + (legendHeight - legendPaddingBottom) + ')')
+          .call(legendXAxis);
+
+        /**
+         * main rect
+         */
+        svg.selectAll('rect')
+          .data(dataset)
+          .enter()
+          .append('rect')
+          .attr('class', 'cell')
+          .attr('x', function(d, i) {
+            return xScale(years[i]);
+          })
+          .attr('data-year', function(d, i) {
+            return d.year;
+          })
+          .attr('y', function(d, i) {
+            return yScale(monthIntegers[i]);
+          })
+          .attr('data-month', function(d, i) {
+            return monthIntegers[i];
+          })
+          .attr('width', function(d, i) {
+            return xScale.bandwidth(years[i]);
+          })
+          .attr('height', function(d, i) {
+            return yScale.bandwidth(monthIntegers[i]);
+          })
+          .attr('fill', function(d, i) {
+            return legendThreshold(temperatures[i]);
+          })
+          .attr('data-temp', function(d, i) {
+            return temperatures[i];
+          })
+          .attr('index', function(d, i) {
+            return i;
+          })
+          .on('mouseenter', function(event, d) {
+            var i = this.getAttribute('index');
+            var x = xScale(years[i]);
+            var y = yScale(monthIntegers[i]);
+            var $outerWrapper = document.querySelector('.svg-outer-wrapper');
+            var $innerWrapper = document.querySelector('.svg-inner-wrapper');
+            var outerWrapperWidth = $outerWrapper.offsetWidth;
+            var innerWrapperWidth = $innerWrapper.offsetWidth;
+            var xGap = outerWrapperWidth > innerWrapperWidth ? (outerWrapperWidth - innerWrapperWidth) / 2 : 0;
+
+            /**
+             * Modify x
+             */
+            if (x + tooltipWidth + svgPaddingLeft + xGap > outerWrapperWidth) {
+              x = x + xGap - tooltipWidth - 10;
+            } else {
+              x = x + xGap + 10;
+            }
+
+            this.style.strokeWidth = 1;
+            this.style.stroke = 'black';
+            tooltip.style('background', legendThreshold(temperatures[i]));
+            tooltip.style('color', legendTextThreshold(temperatures[i]));
+
+            var date = new Date(years[i], monthIntegers[i], 10);
+            var html = d3.timeFormat('%Y - %B')(date) + '<br>';
+            html += d3.format('.1f')(temperatures[i]) + '<br>';
+            html += d3.format('+.1f')(temperatureVariances[i]) + '<br>';
+            tooltip.html(html);
+
+            /**
+             * Modify y
+             */
+            var outerWrapperHeight = $outerWrapper.offsetHeight;
+            var tooltipHeight = document.getElementById('tooltip').offsetHeight;
+
+            if (y + tooltipHeight + svgPaddingBottom > outerWrapperHeight) {
+              y = (outerWrapperHeight - svgPaddingBottom - tooltipHeight + 30);
+            }
+
+            tooltip
+              .attr('data-year', this.getAttribute('data-year'))
+              .style('left', x + 'px')
+              .style('top', y + 'px');
+            tooltip.transition().duration(200).style('opacity', 0.9);
+          })
+          .on('mouseleave', function(event, d) {
+            this.style.strokeWidth = 0;
+            tooltip.transition().duration(200).style('opacity', 0);
+          });
+      });
+  });
+</script>
+</body>
+</html>
